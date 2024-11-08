@@ -14,7 +14,7 @@ import se.uu.ub.cora.logger.LoggerProvider;
 import se.uu.ub.cora.logger.spies.LoggerFactorySpy;
 import se.uu.ub.cora.logger.spies.LoggerSpy;
 
-public class FileOrganizerTest {
+public class FileOrganizerCommandLineTest {
 
 	private static final String BASEPATH = "./src/test/resources/";
 	private static final String BASEPATH_ONLY_IMAGES = "./src/test/resources/onlyImages/";
@@ -26,15 +26,13 @@ public class FileOrganizerTest {
 	private LoggerFactorySpy loggerFactorySpy;
 	private String[] argsOnlyNonImagesPath;
 	private String[] argsOnlyImagesPath;
-	private FileOrganizerImp organizer;
 
 	@BeforeMethod
 	private void beforeMethod() {
 		loggerFactorySpy = new LoggerFactorySpy();
 		LoggerProvider.setLoggerFactory(loggerFactorySpy);
-		// fileOrganizer = new FileOrganizerCommandLine();
+		fileOrganizer = new FileOrganizerCommandLine();
 		imagingAdapter = new ImagingAdapterSpy();
-		organizer = FileOrganizerImp.usingImagingAdapter(imagingAdapter, FILENAME_FORMAT);
 
 		argsBasePath = new String[] { BASEPATH, FILENAME_FORMAT };
 		argsOnlyImagesPath = new String[] { BASEPATH_ONLY_IMAGES, FILENAME_FORMAT };
@@ -44,18 +42,19 @@ public class FileOrganizerTest {
 
 	@Test
 	public void testLoggerInit() throws Exception {
-		loggerFactorySpy.MCR.assertParameters("factorForClass", 0, FileOrganizerImp.class);
-		loggerFactorySpy.MCR.assertNumberOfCallsToMethod("factorForClass", 1);
+		FileOrganizerCommandLine.setImagingAdapter(imagingAdapter);
+		FileOrganizerCommandLine.main(argsBasePath);
 
-		assertEquals(imagingAdapter, organizer.onlyForTestGetImagingAdapter());
-		assertEquals(FILENAME_FORMAT, organizer.onlyForTestGetFileformat());
+		loggerFactorySpy.MCR.assertParameters("factorForClass", 0, FileOrganizerCommandLine.class);
+		loggerFactorySpy.MCR.assertNumberOfCallsToMethod("factorForClass", 1);
 	}
 
 	@Test
 	public void testCallsImagingAdapter() throws Exception {
+		FileOrganizerCommandLine.setImagingAdapter(imagingAdapter);
 
-		organizer.organize(Path.of(BASEPATH_ONLY_IMAGES));
-		List<String> imageFilesWhenCreated = organizer.onlyForTestGetFilesToOrganize();
+		FileOrganizerCommandLine.main(argsOnlyImagesPath);
+		List<String> imageFilesWhenCreated = fileOrganizer.getFilesToOrganize();
 
 		imagingAdapter.MCR.assertNumberOfCallsToMethod("getOriginalDateFromFile", 5);
 
@@ -77,9 +76,11 @@ public class FileOrganizerTest {
 
 	@Test
 	public void testSetCorrectFileNamesForEachImage() throws Exception {
-		organizer.organize(Path.of(BASEPATH_ONLY_IMAGES));
+		FileOrganizerCommandLine.setImagingAdapter(imagingAdapter);
 
-		List<String> filesToOrganize = organizer.onlyForTestGetFilesToOrganize();
+		FileOrganizerCommandLine.main(argsOnlyImagesPath);
+		List<String> filesToOrganize = fileOrganizer.getFilesToOrganize();
+
 		assertTrue(filesToOrganize.get(0).matches("someFormattedDate.jpg"));
 	}
 
@@ -87,13 +88,13 @@ public class FileOrganizerTest {
 	public void testImagingAdapterThrowsExcpetion() throws Exception {
 		imagingAdapter.MRV.setAlwaysThrowException("getOriginalDateFromFile",
 				ImagingException.withMessage("error from spy"));
+		FileOrganizerCommandLine.setImagingAdapter(imagingAdapter);
 
-		organizer.organize(Path.of(BASEPATH_ONLY_IMAGES));
-
-		List<String> filesToOrganize = organizer.onlyForTestGetFilesToOrganize();
+		FileOrganizerCommandLine.main(argsOnlyImagesPath);
+		List<String> imageFilesWhenCreated = fileOrganizer.getFilesToOrganize();
 
 		imagingAdapter.MCR.assertNumberOfCallsToMethod("getOriginalDateFromFile", 5);
-		assertEquals(filesToOrganize.size(), 0);
+		assertEquals(imageFilesWhenCreated.size(), 0);
 
 		LoggerSpy logger = getLogger();
 		logger.MCR.assertNumberOfCallsToMethod("logWarnUsingMessageAndException", 5);
@@ -123,12 +124,13 @@ public class FileOrganizerTest {
 	@Test
 	public void testAcceptOnlyImageFormat_JPG_otherwiseLogFilesWhichAreNotProcessed()
 			throws Exception {
-		organizer.organize(Path.of(BASEPATH_ONLY_NON_IMAGES));
+		FileOrganizerCommandLine.setImagingAdapter(imagingAdapter);
 
-		List<String> filesToOrganize = organizer.onlyForTestGetFilesToOrganize();
+		FileOrganizerCommandLine.main(argsOnlyNonImagesPath);
+		List<String> imageFilesWhenCreated = fileOrganizer.getFilesToOrganize();
 
 		imagingAdapter.MCR.assertNumberOfCallsToMethod("getOriginalDateFromFile", 0);
-		assertEquals(filesToOrganize.size(), 0);
+		assertEquals(imageFilesWhenCreated.size(), 0);
 
 		LoggerSpy logger = getLogger();
 		logger.MCR.assertNumberOfCallsToMethod("logWarnUsingMessage", 2);
@@ -143,7 +145,10 @@ public class FileOrganizerTest {
 
 	@Test
 	public void testFindFilesInDeeperFolderStructure() throws Exception {
-		organizer.organize(Path.of(BASEPATH));
+		FileOrganizerCommandLine.setImagingAdapter(imagingAdapter);
+
+		FileOrganizerCommandLine.main(argsBasePath);
+		fileOrganizer.getFilesToOrganize();
 
 		imagingAdapter.MCR.assertNumberOfCallsToMethod("getOriginalDateFromFile", 5);
 
@@ -151,14 +156,23 @@ public class FileOrganizerTest {
 
 	@Test
 	public void testPathMightBeAFile() throws Exception {
-		organizer.organize(Path.of("./src/test/resources/onlyImages/manga.jpg"));
+		String[] argsToAnImage = new String[] { "./src/test/resources/onlyImages/manga.jpg",
+				FILENAME_FORMAT };
+		FileOrganizerCommandLine.setImagingAdapter(imagingAdapter);
+
+		FileOrganizerCommandLine.main(argsToAnImage);
+		fileOrganizer.getFilesToOrganize();
 
 		imagingAdapter.MCR.assertNumberOfCallsToMethod("getOriginalDateFromFile", 1);
 	}
 
 	@Test
 	public void testNotExistingPath() throws Exception {
-		organizer.organize(Path.of("notExistingPath"));
+		String[] notExistingPath = new String[] { "notExistingPath", FILENAME_FORMAT };
+		FileOrganizerCommandLine.setImagingAdapter(imagingAdapter);
+
+		FileOrganizerCommandLine.main(notExistingPath);
+		fileOrganizer.getFilesToOrganize();
 
 		LoggerSpy logger = getLogger();
 		logger.MCR.assertNumberOfCallsToMethod("logErrorUsingMessage", 1);
